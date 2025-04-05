@@ -34,10 +34,13 @@ This section explores **performance** in Snowflake, focusing on **virtual wareho
 
 - **Started**: Warehouse is actively running and accruing credits.
 - **Suspended**: Warehouse is shut down, *not* accruing credits; any data cache is lost on suspend.
-- **Resizing**: The warehouse is **changing size** (e.g., SMALL → MEDIUM).
-    - **Running queries continue uninterrupted** using the current resources.
-    - The new size only applies to **queued and future queries** once the resize operation completes.
-    - This ensures **zero downtime** and a smooth transition between resource allocations.
+- **Resizing**: The warehouse is **scaling up or down** — that is, changing its size (e.g., `SMALL` → `MEDIUM` or `LARGE` → `SMALL`).
+  - This is also called **vertical scaling**.
+  - **Running queries continue uninterrupted** using the original size.
+  - The new size applies only to **queued and future queries** after the resize completes.
+  - Resizing is always a **manual operation** and affects a **single cluster** — it is **not the same** as scaling out with multiple clusters.
+  - This mechanism ensures **zero downtime** and a smooth transition between resource levels.
+
 ### 2.2 Commands
 
 ```sql
@@ -146,8 +149,32 @@ A **multi-cluster warehouse** allows Snowflake to launch multiple *identical com
 ### 5.1 Configuration
 
 - **MIN_CLUSTER_COUNT** and **MAX_CLUSTER_COUNT**
-  - If `MIN == MAX`, you're in "**Maximized Mode**" → a fixed number of clusters are always running.
-  - If `MIN < MAX`, you're in "**Auto-Scale Mode**" → Snowflake scales clusters up/down automatically based on query concurrency or queueing.
+
+  These parameters define how many **compute clusters** Snowflake is allowed to run **simultaneously** under a single multi-cluster warehouse:
+
+  - **MIN_CLUSTER_COUNT**: The **minimum number of clusters** that will always be active when the warehouse is running.
+    - Snowflake **never runs fewer than this** (even if the load is low).
+    - Acts like the "base capacity" of the warehouse.
+
+  - **MAX_CLUSTER_COUNT**: The **maximum number of clusters** that Snowflake can launch to handle spikes in query load.
+    - Snowflake **never exceeds this limit**, even during heavy concurrency.
+
+  Together, these control the **scale-out range** of your multi-cluster warehouse.
+
+---
+
+#### ⚙️ Modes of Operation
+
+- **Maximized Mode** (`MIN_CLUSTER_COUNT == MAX_CLUSTER_COUNT`)
+  - A fixed number of clusters always run — scaling is **disabled**.
+  - Example: `MIN = 3`, `MAX = 3` → 3 clusters run all the time.
+  - Good for workloads with **predictable high concurrency** and consistent performance needs.
+
+- **Auto-Scale Mode** (`MIN_CLUSTER_COUNT < MAX_CLUSTER_COUNT`)
+  - Snowflake can **dynamically scale out** by adding clusters when queries are queued.
+  - Also scales **back in** by removing clusters during idle periods (based on scaling policy).
+  - Example: `MIN = 1`, `MAX = 5` → Snowflake runs at least 1 cluster and scales up to 5 as needed.
+  - Ideal for **variable workloads**, such as interactive dashboards, user traffic peaks, or batch jobs.
 
 
 ### 5.2 Scaling Policy
@@ -180,8 +207,20 @@ A **multi-cluster warehouse** allows Snowflake to launch multiple *identical com
 > 💡 **Real concurrency happens when multiple queries are submitted at the same time from different sessions**.  
 > For example, if you run one query per tab in the Snowflake Web UI, each tab uses a separate session — so queries may run in parallel and cause queuing if the warehouse is fully loaded.  
 > In contrast, multiple queries separated by semicolons (`;`) in a single query editor tab are executed sequentially and do **not** cause concurrency or queuing.
-> 
-> 
+
+
+### ✅ True/False Review
+
+-   **"A virtual warehouse can only be scaled up manually."** → ✅ **True**
+  -   Snowflake does **not** auto-increase warehouse size (`WAREHOUSE_SIZE`).
+  -   It can **scale out automatically** using multiple clusters, but **scaling up** is always a **manual operation**.
+
+
+⚠️ **Common confusion:**
+
+-   ❌ **Scaling up** = increasing size (e.g. `SMALL` → `LARGE`) → **manual only**
+-   ✅ **Scaling out** = adding clusters (multi-cluster) → **can be automatic**
+ 
 ## 6. Query Acceleration Service (QAS)
 
 - **Definition**: A *serverless* feature that *dynamically* adds compute power to *complex, parallelizable* queries.
