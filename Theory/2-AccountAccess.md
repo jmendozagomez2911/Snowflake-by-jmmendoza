@@ -43,6 +43,23 @@ Exam-wise, you’ll see many questions about creating/managing roles, understand
 
 ---
 
+### 🧠 Account vs User
+
+To clarify Snowflake's structure:
+
+- An **account** is a complete Snowflake environment — it contains its own warehouses, databases, roles, and users. Each organization may have multiple accounts (e.g. dev, test, prod).
+- A **user** is an identity that connects to a specific account. Users exist **inside an account**, and each account manages its own user list.
+
+You filter by `user_name` in views like `ACCOUNT_USAGE.QUERY_HISTORY` to see what each individual user did **within that account**. You are not querying users from other accounts — only from the one you're logged into.
+
+Example:
+```sql
+SELECT user_name, query_text, execution_status
+FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+WHERE start_time >= DATEADD(DAY, -1, CURRENT_TIMESTAMP());
+```
+
+
 ## 3. Roles
 
 - **Definition**: A *role* is a *securable object* that can hold privileges on other objects. Roles can also be granted to other roles, forming a hierarchy.
