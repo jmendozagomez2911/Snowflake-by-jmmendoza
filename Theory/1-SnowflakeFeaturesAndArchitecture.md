@@ -31,18 +31,28 @@ This reference covers key concepts about Snowflake’s architecture, objects, an
 
 ### 2.1 Shared-Disk vs. Shared-Nothing
 
-- **Shared-Disk**
-    - Single centralized storage accessible to all nodes.
-    - Simpler management but can be a single point of failure and lead to resource contention.
+- **Shared-Disk Architecture**
+    - All compute nodes share access to a **centralized disk/storage system**.
+    - **Resources like memory and CPU are also shared or tightly coupled**, requiring constant coordination (e.g., locking, cache synchronization).
+    - This tight coupling can lead to **contention and performance bottlenecks**, especially under high concurrency.
+    - Suitable for **traditional clustered systems** (e.g., Oracle RAC), but **less ideal for elastic, cloud-native environments** due to limited scalability and complex coordination.
 
-- **Shared-Nothing**
-    - Each node has its own local storage and compute.
-    - Allows cheap commodity hardware and high parallelism but tightly couples storage and compute.
-    - Can require data shuffling among nodes; scaling can be complex.
+- **Shared-Nothing Architecture**
+    - Each node has its own **local storage, CPU, and memory** — no shared components.
+    - Enables **cheap horizontal scaling** and **high parallelism**, using **commodity hardware**.
+    - However, **storage and compute are tightly coupled** — scaling compute requires scaling storage too.
+    - Also, complex queries may require **data shuffling across nodes**, which can introduce overhead.
+    - Common in distributed processing frameworks like **Apache Hadoop**, **Apache Spark**, **Presto**, and **Trino**.
+
+
+![img_1.png](resources/sharedDiskVsNothing.png)
 
 ### 2.2 Snowflake’s Multi-Cluster Shared Data Architecture
 
 Snowflake does **not follow a pure shared-nothing architecture**. Instead, it adopts a **hybrid approach**:
+
+![img.png](resources/multiClusterSharedDataArchitecture.png)
+
 - **Shared-disk for storage**: all compute nodes access the same centralized data storage.
 - **Shared-nothing for compute**: each virtual warehouse is an independent cluster with no shared memory or CPU.
 
@@ -68,23 +78,46 @@ Snowflake does **not follow a pure shared-nothing architecture**. Instead, it ad
     - Enables independent scaling of storage and compute.
     - Supports massive concurrency via multiple virtual warehouses.
     - Delivered as a fully managed SaaS: no OS or cluster maintenance needed.
+  
+
+
+
+### 🆚 Shared-Disk vs. Shared-Data (Snowflake)
+
+| Feature                  | Shared-Disk                      | Shared-Data (Snowflake)               |
+|--------------------------|----------------------------------|----------------------------------------|
+| Storage Access           | Shared local disk                | Shared cloud storage (e.g., S3)        |
+| Compute                  | Tightly coupled                  | Fully isolated (virtual warehouses)    |
+| Coordination Overhead    | High (locking, cache sync)       | None (warehouses don’t coordinate)     |
+| Scalability              | Limited                          | Elastic and nearly infinite            |
+| Workload Isolation       | Weak (shared resources)          | Strong (each warehouse is independent) |
+| Example Systems          | Oracle RAC, IBM DB2              | ✅ Snowflake                           |
 
 ### 2.3 Avoiding Bottlenecks with Shared Storage
 
 Although Snowflake uses a centralized storage model (shared-disk), it avoids typical bottlenecks through several key design principles:
 
 - **Decoupled compute and storage**: Data is not constantly read from storage in real-time. Virtual warehouses cache frequently accessed data locally.
+
 - **Highly parallel data access**:  
   Data is partitioned into micro-partitions (50–500 MB, columnar, compressed), each with built-in metadata such as min/max values, null counts, and more. When a query runs, Snowflake uses this metadata to eliminate irrelevant partitions (partition pruning), reducing the amount of data scanned.
 
-  These micro-partitions are read **in parallel across multiple compute nodes** within the virtual warehouse. Each node processes different micro-partitions simultaneously, enabling high-performance, distributed execution. 
-  
+  These micro-partitions are read **in parallel across multiple compute nodes** within the virtual warehouse. Each node processes different micro-partitions simultaneously, enabling high-performance, distributed execution. Then, **results are merged** automatically to produce the final query output.
+
+    - ✅ For **simple scans and filters**, parallelism ensures fast, scalable performance.
+    - ✅ For **joins**, Snowflake may perform **data shuffling** across nodes if the join key values are not well-distributed.
+    - ⚠️ Ideally, all rows with the same join key should be **co-located** (i.e., processed by the same node) to avoid shuffle overhead. This can happen naturally if the data was loaded in order or via `CLUSTER BY`.
+
   This performance benefit applies specifically to **internal Snowflake-managed tables**. External data (e.g., files in cloud storage) does not benefit from micro-partitioning or local caching in the same way.
- - **Smart caching**: Warehouses cache metadata, query results, and data blocks, reducing the need to access central storage repeatedly.
+
+- **Smart caching**: Warehouses cache metadata, query results, and data blocks, reducing the need to access central storage repeatedly.
+
 - **Selective data scanning**: Metadata allows Snowflake to only scan the necessary partitions for a query, avoiding full table scans.
+
 - **Cloud-native infrastructure**: The underlying cloud storage (e.g., S3) is massively parallel and scalable, not a single physical disk.
 
 As a result, Snowflake combines the simplicity of shared-disk with the performance and scalability benefits of shared-nothing compute.
+
 
 ---
 
@@ -145,12 +178,11 @@ Snowflake objects exist in a **hierarchy**:
 ---
 
 ## 5. Table & View Types
-
 - **Table Types**
-    1. **Permanent** (default, up to 90-day Time Travel, plus 7-day Fail-safe).
-    2. **Transient** (limited Time Travel, no Fail-safe, cheaper for transient data).
-    3. **Temporary** (lives only for session duration, no Fail-safe).
-    4. **External** (points to data stored outside Snowflake in external cloud storage; read-only).
+    1. **Permanent** (default, supports up to 90-day Time Travel plus 7-day Fail-safe — though the actual Time Travel limit depends on your Snowflake edition: **1 day for Standard Edition**, up to **90 days for Enterprise Edition or higher**).
+    2. **Transient** (limited Time Travel, no Fail-safe, cheaper for transient or staging data).
+    3. **Temporary** (lives only for session duration, no Time Travel, no Fail-safe).
+    4. **External** (points to data stored outside Snowflake in external cloud storage; read-only, no Time Travel or Fail-safe).
 
 - **View Types**
     1. **Standard View**

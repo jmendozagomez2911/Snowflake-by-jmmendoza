@@ -47,17 +47,17 @@ Snowflake provides two programmatic ways to analyze query history using SQL — 
       FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
       WHERE start_time >= DATEADD(DAY, -1, CURRENT_TIMESTAMP());
       ```
-
 - **INFORMATION_SCHEMA Table Functions** (in each database):
-  - 7 days of query history, nearly real-time.
-  - Best for **real-time monitoring**, **troubleshooting**, or **per-database dashboards**.
-  - ✅ You are calling table functions like `QUERY_HISTORY()`, `TABLE_STORAGE_METRICS()`, and others — limited to **only that specific database**.
-    - Includes similar fields: `query_text`, `execution_status`, `start_time`, etc.
-    - Example use:
-      ```sql
-      SELECT *
-      FROM TABLE(MY_DB.INFORMATION_SCHEMA.QUERY_HISTORY(DATE_RANGE_START => DATEADD(HOUR, -1, CURRENT_TIMESTAMP())));
-      ```
+  - A read-only schema **automatically created in every database**.
+  - It provides metadata for **all schemas within the same database** — for example, if your database has `PUBLIC`, `HR`, and `SALES` schemas, `INFORMATION_SCHEMA.TABLES` will show tables from all three.
+  - Real-time or near real-time metadata, but with **shorter history** (typically from 7 days to 6 months, depending on the object type).
+  - Does **not** track dropped objects.
+  - For example:
+    ```sql
+    SELECT *
+    FROM MY_DATABASE.INFORMATION_SCHEMA.TABLES;
+    ```
+    This returns a list of all tables and views across **all schemas** in `MY_DATABASE`, such as `MY_DATABASE.PUBLIC`, `MY_DATABASE.HR`, etc.
 
 Use these programmatic options depending on your needs:
 - Use `ACCOUNT_USAGE` for **long-term, account-wide auditing** and reporting.

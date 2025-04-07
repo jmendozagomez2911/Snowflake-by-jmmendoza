@@ -65,15 +65,17 @@ WHERE start_time >= DATEADD(DAY, -1, CURRENT_TIMESTAMP());
 - **Definition**: A *role* is a *securable object* that can hold privileges on other objects. Roles can also be granted to other roles, forming a hierarchy.
 
   - **System-Defined Roles**
-       1. **ORGADMIN**: Top-level *organization* role (manages multiple Snowflake accounts, usage across org, etc.).
-       2. **ACCOUNTADMIN**: Top-level *account* role; can do nearly everything in the account (billing, all object access).
-       3. **SECURITYADMIN**: Manages **access control and privileges** across the account. Can create, alter, and drop both **users and roles**, and **grant or revoke roles and object-level privileges**. Also responsible for managing **role hierarchies**, RBAC enforcement, and **enterprise-level security policies**.
-       4. **USERADMIN**: Manages **user accounts** and **custom roles**. Can create, alter, and drop users, reset passwords, assign default roles, and manage login policies. Can assign roles to users, but **only within its hierarchy**. Does **not** manage object-level privileges or role delegation.
-       5. **SYSADMIN**: Manages *objects* (warehouses, databases, schemas, etc.).
-       6. **PUBLIC**: A pseudo-role granted to *all* users by default (objects owned by PUBLIC are open to everyone).
+      1. **ORGADMIN**: Top-level *organization* role (manages multiple Snowflake accounts, usage across org, etc.).
+      2. **ACCOUNTADMIN**: Top-level *account* role; can do nearly everything in the account (billing, all object access).
+      3. **SECURITYADMIN**: Manages **access control and privileges** across the account. Can create, alter, and drop both **users and roles**, and **grant or revoke roles and object-level privileges**. Also responsible for managing **role hierarchies**, RBAC enforcement, and **enterprise-level security policies**.  
+         → Use this role when enforcing security, assigning roles to other roles, or managing access to objects like tables, warehouses, and databases.
+      4. **USERADMIN**: Manages **user accounts** and **custom roles**. Can create, alter, and drop users, reset passwords, assign default roles and warehouses (only within its role hierarchy), and manage login policies.  
+       → Use this role for onboarding users, managing identity, and setting up default access, but **not** for granting access to objects or managing roles outside its scope.
+      5. **SYSADMIN**: Manages *objects* (warehouses, databases, schemas, etc.).
+      6. **PUBLIC**: A pseudo-role granted to *all* users by default (objects owned by PUBLIC are open to everyone).
 
-        ### USERADMIN vs SECURITYADMIN
-      
+      ### USERADMIN vs SECURITYADMIN
+    
         | Feature / Capability                              | `USERADMIN`          | `SECURITYADMIN`        |
         |---------------------------------------------------|----------------------|------------------------|
         | Create/Alter/Drop Users                           | ✅ Yes               | ✅ Yes                |
@@ -83,11 +85,21 @@ WHERE start_time >= DATEADD(DAY, -1, CURRENT_TIMESTAMP());
         | Manage Role Hierarchy (grant role to role)        | ❌ No                | ✅ Yes                |
         | Manage Login Policies / Password Resets           | ✅ Yes               | ✅ Yes                |
         | Used for Role-Based Access Control (RBAC)         | ❌ No                | ✅ Yes
+
+
 - **Custom Roles**
     - Created to implement the principle of *least privilege*.
     - Typically aligned with business roles, e.g., `DATA_ANALYST`, `ETL_ENGINEER`, etc.
-    - A custom role can be granted to a system-defined role (e.g., `SYSADMIN`) for top-level management.
-    - Created by roles that have `CREATE ROLE` (e.g., USERADMIN).
+    - Created by roles that have the `CREATE ROLE` privilege, such as `USERADMIN`, `SECURITYADMIN`, or `ACCOUNTADMIN`.
+    - However, **creating a custom role is not the same as assigning it**:
+        - `USERADMIN` can create and assign roles, but **only within its own hierarchy**.
+        - To assign a custom role to a **system-defined role** (e.g., `SYSADMIN`) or across role trees, a higher-level role such as `SECURITYADMIN` is required.
+    - Example:
+      ```sql
+      CREATE ROLE data_engineer;
+      GRANT ROLE data_engineer TO ROLE sysadmin; -- requires SECURITYADMIN
+      ```
+    - This separation ensures that role delegation respects Snowflake’s role hierarchy and prevents unauthorized privilege elevation.
 
 - **Role Hierarchy**
     - If Role A is granted to Role B, then Role B inherits all privileges of Role A.
